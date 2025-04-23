@@ -7,48 +7,89 @@ import re
 
 def format_diagnosis_to_html(diagnosis_text: str) -> str:
     """
-    手相診断結果のテキストを基本的なHTML形式に整形する。
+    手相診断結果のテキストを、セクションごとにデザインされたHTML形式に整形する。
     Markdownの箇条書き(-, *)や太字(**)をHTMLに変換する。
 
     Args:
         diagnosis_text: 手相診断結果の生テキスト。
 
     Returns:
-        HTML形式に整形されたテキスト。
+        デザイン付きのHTML形式に整形されたテキスト。
     """
     lines = diagnosis_text.strip().split('\n')
-    html_lines = []
-    in_list = False
+    html_sections = []
+    current_section_title = None
+    current_section_content = []
 
     for line in lines:
         stripped_line = line.strip()
+
         if not stripped_line:
-            if in_list:
-                html_lines.append('</ul>')
-                in_list = False
+            # 空行があればセクションの区切りとみなす
+            if current_section_title or current_section_content:
+                html_sections.append(
+                    render_section_html(current_section_title, current_section_content)
+                )
+                current_section_title = None
+                current_section_content = []
             continue
 
-        # Markdown太字の変換
-        processed_line = stripped_line
+        # セクションタイトルを検出（例: **セクションタイトル**）
+        title_match = re.match(r'^\*\*(.*?)\*\*', stripped_line)
+        if title_match:
+            if current_section_title or current_section_content:
+                html_sections.append(
+                    render_section_html(current_section_title, current_section_content)
+                )
+            current_section_title = title_match.group(1).strip()
+            current_section_content = []
+        else:
+            current_section_content.append(stripped_line)
+
+    # 最後のセクションを追加
+    if current_section_title or current_section_content:
+        html_sections.append(
+            render_section_html(current_section_title, current_section_content)
+        )
+
+    return '\n'.join(html_sections)
+
+def render_section_html(title: str | None, content_lines: list[str]) -> str:
+    """
+    単一のセクションをHTMLとしてレンダリングするヘルパー関数。
+    """
+    html_content = []
+
+    if title:
+        html_content.append(f'<h3 class="text-lg md:text-xl font-semibold text-indigo-700 mb-3">{title}</h3>')
+
+    # 内容部分のMarkdown整形
+    formatted_content = []
+    in_list = False
+    for line in content_lines:
+         # Markdown太字の変換
+        processed_line = line
         processed_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', processed_line)
 
         if processed_line.startswith('- ') or processed_line.startswith('* '):
             if not in_list:
-                html_lines.append('<ul>')
+                formatted_content.append('<ul>')
                 in_list = True
-            # リスト記号とそれに続くスペースを取り除く
             list_item_content = processed_line[2:].strip()
-            html_lines.append(f'<li>{list_item_content}</li>')
+            formatted_content.append(f'<li class="mb-2">{list_item_content}</li>')
         else:
             if in_list:
-                html_lines.append('</ul>')
+                formatted_content.append('</ul>')
                 in_list = False
-            html_lines.append(f'<p>{processed_line}</p>')
+            formatted_content.append(f'<p class="mb-4 last:mb-0">{processed_line}</p>')
 
     if in_list:
-        html_lines.append('</ul>')
+        formatted_content.append('</ul>')
 
-    return '\n'.join(html_lines)
+    html_content.extend(formatted_content)
+
+    # セクション全体を囲むdiv
+    return f'<div class="bg-gray-50 p-4 rounded-lg shadow-sm mb-6">{'\n'.join(html_content)}</div>'
 
 def diagnose_and_generate_html(
     image_path: str,
@@ -129,10 +170,10 @@ def diagnose_and_generate_html(
     print("-----------------------------------")
 
 
-    # Pythonで定義したHTMLテンプレート
+    # Pythonで定義したHTMLテンプレート (静的文字列 + replace)
     # プレースホルダーを __USER_NAME__ と __DIAGNOSIS_RESULT__ に変更
-    # CSSとJavaScript内の波括弧はエスケープしない
-    html_template = f"""
+    # CSSとJavaScript内の波括弧はそのまま (Pythonによる解釈なし)
+    html_template = """
 <!DOCTYPE html>
 <html lang="ja">
 <head>
